@@ -11,17 +11,22 @@ they are meant to survive app updates rather than being pinned to one build.
 > of the app: you must supply your own APK (see *Usage*). Nothing here unlocks a paid
 > feature — the app has none.
 
-## What's included
+## 🩹 Patches list
+
+<!-- PATCHES_START EXPANDED -->
+
+<!-- Do not modify this section by hand. The patch list is generated when release.yml creates a new release. -->
 
 | Patch | Default | What it does |
 |-------|---------|--------------|
-| **Disable license check** | on | Neutralizes PairIP's `LicenseClient.checkLicense`, which otherwise force-quits any re-signed (i.e. patched) build ~1 s after launch. Required for any patched build to run. |
-| **Configurable bitrate tiers** | on | Rescales the LOW / MEDIUM / HIGH video bitrate tiers to **25% / 50% / 75% of the encoder's maximum** (MAX unchanged). On a flagship at 1080p30 H.265 this turns the stock **6 / 9 / 12 / 160 Mbps** options into usable **~40 / 80 / 120 / 160 Mbps** steps, removing the order-of-magnitude gap between HIGH and MAX. |
-| **Smooth gallery thumbnails** | on | Replaces the in-app gallery's grid thumbnail fetcher — which spins up a full ExoPlayer + GL-readback pipeline *per tile* (hundreds of MB of transient graphics memory and a short-lived video player for every thumbnail) — with a direct `MediaMetadataRetriever.getScaledFrameAtTime` decode at the tile size. In testing this cut browsing-time graphics memory from a ~770 MB peak to ~105 MB and player instantiations from ~121 to ~12 per session, removing the stutter and the low-memory-killer risk during recording. |
-| **Unlock developer options** | **off** | Reveals the hidden internal "Development" settings category (debug-UI overlay, software-encoder selection, custom bitrate field, camera-DB reload, …), gated behind an "internal builds only" check in release builds. Off by default — these are debug toggles, and some do nothing useful on a retail device. |
+| **Smooth gallery thumbnails** | on | Replaces the in-app gallery's grid thumbnail fetcher, which starts a full ExoPlayer + GL-readback pipeline *per tile*, with a direct `MediaMetadataRetriever.getScaledFrameAtTime` decode at the tile size. |
+| **Configurable bitrate tiers** | on | Rescales LOW / MEDIUM / HIGH to **25% / 50% / 75% of the encoder's maximum** (MAX unchanged). At 1080p30 H.265 on a flagship: stock **6 / 9 / 12 / 160 Mbps** → **~40 / 80 / 120 / 160**. |
+| **Disable license check** | on | Neutralizes PairIP's `LicenseClient.checkLicense`, which force-quits any re-signed (patched) build ~1 s after launch. |
+| **Unlock developer options** | **off** | Reveals the hidden internal "Development" settings category. |
 
-All patches are verified end-to-end (compiled → applied with `morphe-desktop` → confirmed in the
-output dex) and each is independently toggleable in the Manager. See
+<!-- PATCHES_END -->
+
+Each patch is independently toggleable in the Manager. See
 [`docs/BLACKMAGIC_REPORT.md`](docs/BLACKMAGIC_REPORT.md) for the full investigation, including the
 memory/freeze root-cause analysis behind the gallery fix.
 
@@ -34,17 +39,20 @@ build won't start without it.
 
 ## Build
 
-Requirements: JDK 21+, a `kotlinc` and `d8` (Android SDK build-tools) on `PATH`, and the
-`morphe-desktop-*-all.jar` ([releases](https://github.com/MorpheApp/morphe-desktop/releases)).
+Built with the [Morphe patches template](https://github.com/MorpheApp/morphe-patches-template)
+toolchain (JDK 21). The Morphe Gradle plugin is served from GitHub Packages, which needs a GitHub
+token with `read:packages` even though it's public:
 
 ```bash
-MORPHE_JAR=/path/to/morphe-desktop-1.19.1-all.jar ./build.sh
-# -> build/blackmagic-camera-patches.mpp
+export GITHUB_ACTOR=<your-github-user> GITHUB_TOKEN=$(gh auth token)   # token needs read:packages
+./gradlew buildAndroid
+# -> patches/build/libs/patches-<version>.mpp
 ```
 
-The patches are compiled directly against the patcher API inside the morphe-desktop jar, so
-no Gradle or GitHub Packages authentication is needed. The `.mpp` bundles the patches as both
-a `classes.dex` (for the on-device Manager app) and JVM `.class` files (for morphe-desktop).
+Releases are automatic: pushing [conventional commits](https://www.conventionalcommits.org)
+(`feat:`, `fix:`, `perf:`) to `dev` cuts a pre-release, and merging `dev` into `main` cuts a
+stable release. CI regenerates `patches-list.json`, `patches-bundle.json`, `CHANGELOG.md` and the
+patch list above. Don't edit those by hand.
 
 ## Usage
 
@@ -58,8 +66,8 @@ a `classes.dex` (for the on-device Manager app) and JVM `.class` files (for morp
    (Manually: **Sources → Add** → `https://github.com/azain47/blackmagic-camera-patches`.)
    The Manager reads [`patches-bundle.json`](patches-bundle.json) on the `main` branch, downloads
    the `.mpp` from the latest release, and shows it as **"Blackmagic Camera Patches"**.
-3. Tap **Blackmagic Camera**, confirm the two patches are enabled, and patch. Morphe patches the
-   split bundle directly (use the original APKM, don't unsplit it) and handles re-signing/install.
+3. Tap **Blackmagic Camera**, pick the patches you want, and patch. Morphe patches the split
+   bundle directly (use the original APKM, don't unsplit it) and handles re-signing/install.
 
 ### On a computer (morphe-desktop)
 
@@ -72,7 +80,7 @@ a `classes.dex` (for the on-device Manager app) and JVM `.class` files (for morp
 2. Patch `base.apk` (all patched code lives in the base module):
    ```bash
    java -jar morphe-desktop-*-all.jar patch \
-     --patches=blackmagic-camera-patches.mpp \
+     --patches=patches-<version>.mpp \
      --keystore=my.keystore --keystore-password=... \
      --keystore-entry-alias=... --keystore-entry-password=... \
      -o base-patched.apk base.apk
@@ -125,5 +133,6 @@ with Blackmagic Design so the issues can be fixed in the real app.
 
 ## License
 
-[MIT](LICENSE). This repository contains only original patch code and analysis; it does not
-contain or distribute any part of the Blackmagic Camera app.
+[GNU General Public License v3.0](LICENSE), with the additional terms in [NOTICE](NOTICE)
+(inherited from the Morphe patches template). This repository contains only original patch code
+and analysis; it does not contain or distribute any part of the Blackmagic Camera app.
