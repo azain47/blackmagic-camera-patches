@@ -18,7 +18,8 @@
 #   - morphe-desktop-*-all.jar ($MORPHE_JAR), from
 #     https://github.com/MorpheApp/morphe-desktop/releases
 #
-# Output: build/blackmagic-camera-patches.mpp
+# Output: build/blackmagic-camera-patches.mpp, plus patches-list.json in the repo
+# root (read by the Morphe patch indexes; commit it with each release).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -66,7 +67,7 @@ src, dex, out = sys.argv[1], sys.argv[2], sys.argv[3]
 manifest = (
     "Manifest-Version: 1.0\r\n"
     f"Name: {os.environ['MPP_NAME']}\r\n"
-    "Description: Bitrate tiers and license-check bypass.\r\n"
+    "Description: Patches for Blackmagic Camera: smoother gallery, usable bitrate tiers, developer options.\r\n"
     f"Version: {os.environ['MPP_VERSION']}\r\n"
     f"Timestamp: {int(time.time()*1000)}\r\n"
     f"Source: {os.environ['MPP_SOURCE']}\r\n"
@@ -87,4 +88,17 @@ with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zo:
             zo.writestr(n, zin.read(n))
 PY
 
+# 4. Regenerate patches-list.json from the built bundle.
+"$KOTLINC" \
+  -no-stdlib \
+  -Xskip-metadata-version-check \
+  -Xskip-prerelease-check \
+  -Xcontext-parameters \
+  -classpath "$MORPHE_JAR" \
+  -d build/patches-list-generator.jar \
+  tools/PatchListGenerator.kt
+java -cp "$MORPHE_JAR:build/patches-list-generator.jar" PatchListGeneratorKt \
+  "$MPP" "$VERSION" patches-list.json
+
 echo "built: $MPP"
+echo "wrote: patches-list.json"
