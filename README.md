@@ -14,7 +14,7 @@ they are meant to survive app updates rather than being pinned to one build.
 ## 🩹 Patches list
 
 <!-- PATCHES_START EXPANDED -->
-> **[v1.3.0-dev.1](https://github.com/azain47/blackmagic-camera-patches/releases/tag/v1.3.0-dev.1)**&nbsp;&nbsp;•&nbsp;&nbsp;`dev`&nbsp;&nbsp;•&nbsp;&nbsp;4 patches total
+> **[v1.3.0](https://github.com/azain47/blackmagic-camera-patches/releases/tag/v1.3.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;4 patches total
 <details open>
 <summary>📦 Blackmagic Camera&nbsp;&nbsp;•&nbsp;&nbsp;4 patches</summary>
 <br>
