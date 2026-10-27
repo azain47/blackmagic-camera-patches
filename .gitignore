@@ -1,0 +1,17 @@
+# Build output
+build/
+*.mpp
+*.apk
+*.apkm
+*.dex
+*.idsig
+
+# Tooling / local
+*.jar
+.gradle/
+.idea/
+*.iml
+local.properties
+
+# OS
+.DS_Store
