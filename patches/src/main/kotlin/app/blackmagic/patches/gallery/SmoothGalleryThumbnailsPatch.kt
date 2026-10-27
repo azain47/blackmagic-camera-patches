@@ -50,7 +50,10 @@ val smoothGalleryThumbnailsPatch = bytecodePatch(
         val modelType = modelField.type
         val uriField = fieldReads.first { it.definingClass == modelType && it.type == "Landroid/net/Uri;" }
         val intFields = fieldReads.filter { it.definingClass == modelType && it.type == "I" }.distinct()
-        val posField = fieldReads.first { it.definingClass == modelType && it.type == "J" }
+        // 3.5.1's loadData is a dispatcher that launches a coroutine, so the frame
+        // position (a long) is read in the lambda, not here. Resolve it from the model
+        // class definition instead of the dispatcher body.
+        val posField = classDefBy(modelType).fields.first { it.type == "J" }
         if (intFields.size < 2) throw PatchException("gallery model shape changed (width/height)")
         val widthField = intFields[0]
         val heightField = intFields[1]
@@ -59,12 +62,15 @@ val smoothGalleryThumbnailsPatch = bytecodePatch(
             .filter { it.opcode == Opcode.INVOKE_INTERFACE || it.opcode == Opcode.INVOKE_STATIC }
             .map { (it as ReferenceInstruction).reference as MethodReference }
 
-        val deliver = calls.first {
-            it.definingClass == callbackType && it.returnType == "V" &&
+        // The success callback is invoked from the coroutine lambda, not the
+        // dispatcher, so resolve both callback methods from the interface definition.
+        val callbackClass = classDefBy(callbackType)
+        val deliver = callbackClass.methods.first {
+            it.returnType == "V" &&
                 it.parameterTypes.map { p -> p.toString() } == listOf("Ljava/lang/Object;")
         }
-        val onFailed = calls.first {
-            it.definingClass == callbackType && it.returnType == "V" &&
+        val onFailed = callbackClass.methods.first {
+            it.returnType == "V" &&
                 it.parameterTypes.map { p -> p.toString() } == listOf("Ljava/lang/Exception;")
         }
         val uriExists = calls.first {
@@ -73,44 +79,48 @@ val smoothGalleryThumbnailsPatch = bytecodePatch(
                 listOf("Landroid/content/Context;", "Landroid/net/Uri;")
         }
 
-        // Prepend the replacement body. Every path returns before reaching the original
-        // ExoPlayer-based extractor, so that pipeline never runs (it stays as unreachable
-        // dead code, which avoids disturbing the original try/catch blocks).
-        // Registers v0..v9 (method has 12 locals + params); getScaledFrameAtTime needs the
-        // 6 contiguous registers v2..v7.
+        // Prepend a self-contained replacement body. Every path returns before the
+        // original dispatcher (coroutine launch) runs, so it stays as unreachable dead
+        // code and its try/catch blocks are never entered.
+        //
+        // The 3.5.1 dispatcher has only 8 registers (5 locals + this/Priority/callback),
+        // many fewer than the old fetcher, so the body is packed into v0..v6 (reusing the
+        // `this` and `Priority` slots after their last read) with the callback kept in p2.
+        // getScaledFrameAtTime(timeUs, option, dstWidth, dstHeight) needs 6 contiguous
+        // registers v0..v5; note option (2 = CLOSEST_SYNC) is the 2nd arg, not the last.
         method.addInstructionsWithLabels(
             0,
             """
-                iget-object v0, p0, ${contextField.smali()}
-                iget-object v1, p0, ${modelField.smali()}
-                iget-object v8, v1, ${uriField.smali()}
-                invoke-static { v0, v8 }, ${uriExists.smali()}
-                move-result v9
-                if-nez v9, :exists
-                new-instance v9, Ljava/io/FileNotFoundException;
-                invoke-direct { v9 }, Ljava/io/FileNotFoundException;-><init>()V
-                invoke-interface { p2, v9 }, ${onFailed.smali()}
+                iget-object v6, p0, ${modelField.smali()}
+                iget-object v3, p0, ${contextField.smali()}
+                iget-object v4, v6, ${uriField.smali()}
+                invoke-static { v3, v4 }, ${uriExists.smali()}
+                move-result v0
+                if-eqz v0, :fail
+                new-instance v0, Landroid/media/MediaMetadataRetriever;
+                invoke-direct { v0 }, Landroid/media/MediaMetadataRetriever;-><init>()V
+                invoke-virtual { v0, v3, v4 }, Landroid/media/MediaMetadataRetriever;->setDataSource(Landroid/content/Context;Landroid/net/Uri;)V
+                iget-wide v1, v6, ${posField.smali()}
+                const-wide/16 v4, 0x3e8
+                mul-long/2addr v1, v4
+                const/4 v3, 0x2
+                iget v4, v6, ${widthField.smali()}
+                iget v5, v6, ${heightField.smali()}
+                invoke-virtual/range { v0 .. v5 }, Landroid/media/MediaMetadataRetriever;->getScaledFrameAtTime(JIII)Landroid/graphics/Bitmap;
+                move-result-object v3
+                invoke-virtual { v0 }, Landroid/media/MediaMetadataRetriever;->release()V
+                if-eqz v3, :faildecode
+                invoke-interface { p2, v3 }, ${deliver.smali()}
                 return-void
-                :exists
-                new-instance v2, Landroid/media/MediaMetadataRetriever;
-                invoke-direct { v2 }, Landroid/media/MediaMetadataRetriever;-><init>()V
-                invoke-virtual { v2, v0, v8 }, Landroid/media/MediaMetadataRetriever;->setDataSource(Landroid/content/Context;Landroid/net/Uri;)V
-                iget-wide v3, v1, ${posField.smali()}
-                const-wide/16 v5, 0x3e8
-                mul-long/2addr v3, v5
-                const/4 v5, 0x2
-                iget v6, v1, ${widthField.smali()}
-                iget v7, v1, ${heightField.smali()}
-                invoke-virtual/range { v2 .. v7 }, Landroid/media/MediaMetadataRetriever;->getScaledFrameAtTime(JIII)Landroid/graphics/Bitmap;
-                move-result-object v9
-                invoke-virtual { v2 }, Landroid/media/MediaMetadataRetriever;->release()V
-                if-nez v9, :ok
-                new-instance v9, Ljava/lang/Exception;
-                invoke-direct { v9 }, Ljava/lang/Exception;-><init>()V
-                invoke-interface { p2, v9 }, ${onFailed.smali()}
+                :faildecode
+                new-instance v0, Ljava/lang/Exception;
+                invoke-direct { v0 }, Ljava/lang/Exception;-><init>()V
+                invoke-interface { p2, v0 }, ${onFailed.smali()}
                 return-void
-                :ok
-                invoke-interface { p2, v9 }, ${deliver.smali()}
+                :fail
+                new-instance v0, Ljava/io/FileNotFoundException;
+                invoke-direct { v0 }, Ljava/io/FileNotFoundException;-><init>()V
+                invoke-interface { p2, v0 }, ${onFailed.smali()}
                 return-void
             """.trimIndent(),
         )
