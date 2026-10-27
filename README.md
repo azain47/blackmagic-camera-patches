@@ -46,15 +46,18 @@ a `classes.dex` (for the on-device Manager app) and JVM `.class` files (for morp
 
 ## Usage
 
-### On-device (Morphe / ReVanced Manager) — recommended
+### On-device (Morphe Manager) — recommended
 
 1. Install the [Morphe Manager](https://morphe.software) app.
-2. In **Settings → Patch bundles**, add a new bundle from the URL of the `.mpp` asset on the
-   [latest release](https://github.com/azain47/blackmagic-camera-patches/releases/latest),
-   or import the downloaded `blackmagic-camera-patches.mpp` file. It appears as
-   **"Blackmagic Camera Patches"**.
-3. Select **Blackmagic Camera**, confirm the two patches are enabled, and patch. The Manager
-   handles the split APKs, re-signing and install for you.
+2. Tap the link on your phone to add this repo as a patch source:
+
+   [**➕ Add Blackmagic Camera Patches to Morphe**](https://morphe.software/add-source?github=azain47/blackmagic-camera-patches)
+
+   (Manually: **Sources → Add** → `https://github.com/azain47/blackmagic-camera-patches`.)
+   The Manager reads [`patches-bundle.json`](patches-bundle.json) on the `main` branch, downloads
+   the `.mpp` from the latest release, and shows it as **"Blackmagic Camera Patches"**.
+3. Tap **Blackmagic Camera**, confirm the two patches are enabled, and patch. Morphe patches the
+   split bundle directly (use the original APKM, don't unsplit it) and handles re-signing/install.
 
 ### On a computer (morphe-desktop)
 
