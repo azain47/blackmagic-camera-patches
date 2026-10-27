@@ -78,11 +78,13 @@ manifest = (
 )
 zin = zipfile.ZipFile(src)
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zo:
+    # MANIFEST.MF must be the first entry so streaming readers (the on-device
+    # Manager) find the bundle metadata; otherwise it reports "metadata not found".
+    zo.writestr("META-INF/MANIFEST.MF", manifest)
     zo.writestr("classes.dex", open(dex, "rb").read())
     for n in zin.namelist():
         if n != "META-INF/MANIFEST.MF":
             zo.writestr(n, zin.read(n))
-    zo.writestr("META-INF/MANIFEST.MF", manifest)
 PY
 
 echo "built: $MPP"
