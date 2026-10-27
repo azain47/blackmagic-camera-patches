@@ -14,14 +14,14 @@ they are meant to survive app updates rather than being pinned to one build.
 ## 🩹 Patches list
 
 <!-- PATCHES_START EXPANDED -->
-> **[v1.3.0](https://github.com/azain47/blackmagic-camera-patches/releases/tag/v1.3.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;4 patches total
+> **[v1.4.0-dev.1](https://github.com/azain47/blackmagic-camera-patches/releases/tag/v1.4.0-dev.1)**&nbsp;&nbsp;•&nbsp;&nbsp;`dev`&nbsp;&nbsp;•&nbsp;&nbsp;4 patches total
 <details open>
 <summary>📦 Blackmagic Camera&nbsp;&nbsp;•&nbsp;&nbsp;4 patches</summary>
 <br>
 
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
 |----------|----------------|-----------|
-| [Configurable bitrate tiers](#configurable-bitrate-tiers) | Rescales the LOW / MEDIUM / HIGH video bitrate tiers to 25% / 50% / 75% of the encoder's maximum (MAX is unchanged). At 1080p30 H.265 on a flagship this turns the stock 6 / 9 / 12 / 160 Mbps options into usable ~40 / 80 / 120 / 160 Mbps steps, removing the order-of-magnitude gap between HIGH and MAX. |  |
+| [Configurable bitrate tiers](#configurable-bitrate-tiers) | Rescales the LOW / MEDIUM / HIGH video bitrate tiers to a configurable percentage of the encoder's maximum (MAX is unchanged); defaults are 25 / 50 / 75 %. At 1080p30 H.265 on a flagship this turns the stock 6 / 9 / 12 / 160 Mbps options into usable ~40 / 80 / 120 / 160 Mbps steps, removing the order-of-magnitude gap to MAX. | • LOW tier (% of encoder max)<br>• MEDIUM tier (% of encoder max)<br>• HIGH tier (% of encoder max) |
 | [Disable license check](#disable-license-check) | Disables the PairIP license verification that force-quits a re-signed build. Required for any patched build to launch. |  |
 | [Smooth gallery thumbnails](#smooth-gallery-thumbnails) | Replaces the in-app gallery's grid thumbnail fetcher, which spins up a full ExoPlayer + GL-readback pipeline per cell (hundreds of MB of transient graphics memory and a short-lived player for every tile), with a direct MediaMetadataRetriever.getScaledFrameAtTime decode at the tile size. This removes the memory spikes that make browsing stutter and can trigger the low-memory killer mid-record. |  |
 | [Unlock developer options](#unlock-developer-options) | Reveals the hidden internal "Development" settings category (debug UI overlay, software-encoder selection, custom bitrate field, camera-DB reload, etc.), which the stock release build gates behind an "internal builds only" check. Off by default: these are debug toggles, and some do nothing useful on a retail device. |  |

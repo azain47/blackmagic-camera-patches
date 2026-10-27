@@ -6,31 +6,60 @@ import app.morphe.patcher.extensions.InstructionExtensions.removeInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.patch.PatchException
+import app.morphe.patcher.patch.intOption
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.formats.Instruction35c
 
-// 0.25f / 0.50f / 0.75f as raw 32-bit float bit patterns.
-private const val SCALE_LOW = 0x3e800000   // 0.25f
-private const val SCALE_MEDIUM = 0x3f000000 // 0.50f
-private const val SCALE_HIGH = 0x3f400000   // 0.75f
+// Each tier is stored as a float scale in BitrateLevel.f; with the formula rewrite
+// below, the recorded bitrate is round(encoderMax * scale), so scale == percent / 100.
 
 @Suppress("unused")
 val bitrateTiersPatch = bytecodePatch(
     name = "Configurable bitrate tiers",
-    description = "Rescales the LOW / MEDIUM / HIGH video bitrate tiers to 25% / 50% / 75% of the " +
-        "encoder's maximum (MAX is unchanged). At 1080p30 H.265 on a flagship this turns the stock " +
-        "6 / 9 / 12 / 160 Mbps options into usable ~40 / 80 / 120 / 160 Mbps steps, removing the " +
-        "order-of-magnitude gap between HIGH and MAX.",
+    description = "Rescales the LOW / MEDIUM / HIGH video bitrate tiers to a configurable " +
+        "percentage of the encoder's maximum (MAX is unchanged); defaults are 25 / 50 / 75 %. " +
+        "At 1080p30 H.265 on a flagship this turns the stock 6 / 9 / 12 / 160 Mbps options into " +
+        "usable ~40 / 80 / 120 / 160 Mbps steps, removing the order-of-magnitude gap to MAX.",
     default = true,
 ) {
     compatibleWith(COMPATIBILITY_BLACKMAGIC_CAM)
 
+    val lowPercent by intOption(
+        key = "lowPercent",
+        default = 25,
+        title = "LOW tier (% of encoder max)",
+        description = "LOW bitrate as a percentage of the encoder's maximum (1-100).",
+        required = false,
+    )
+    val mediumPercent by intOption(
+        key = "mediumPercent",
+        default = 50,
+        title = "MEDIUM tier (% of encoder max)",
+        description = "MEDIUM bitrate as a percentage of the encoder's maximum (1-100).",
+        required = false,
+    )
+    val highPercent by intOption(
+        key = "highPercent",
+        default = 75,
+        title = "HIGH tier (% of encoder max)",
+        description = "HIGH bitrate as a percentage of the encoder's maximum (1-100).",
+        required = false,
+    )
+
     execute {
         // --- Part 1: retune the enum scale constants in BitrateLevel.<clinit> ---
-        // Stock: HIGH = 2.0, MEDIUM = 1.5, LOW = 1.0 (as multipliers of a base).
-        // New:   HIGH = 0.75, MEDIUM = 0.50, LOW = 0.25 (as fractions of the ceiling).
+        // Stock: HIGH = 2.0, MEDIUM = 1.5, LOW = 1.0 (multipliers of a base).
+        // New:   scale = percent / 100, so each tier becomes round(encoderMax * percent/100).
+        fun percentToScaleBits(percent: Int?): Int {
+            val p = percent ?: throw PatchException("Bitrate tier percentage is unset.")
+            if (p !in 1..100) {
+                throw PatchException("Bitrate tier percentages must be between 1 and 100 (got $p).")
+            }
+            return (p / 100f).toRawBits()
+        }
+
         BitrateLevelClinitFingerprint.let { fp ->
             val (highIdx, mediumIdx, lowIdx) = fp.instructionMatches.map { it.index }
 
@@ -38,10 +67,9 @@ val bitrateTiersPatch = bytecodePatch(
                 val register = fp.method.getInstruction<OneRegisterInstruction>(index).registerA
                 fp.method.replaceInstruction(index, "const v$register, $newBits")
             }
-            // Replace from last index to first so indices stay valid (all 1:1 here, but kept for clarity).
-            retune(highIdx, SCALE_HIGH)
-            retune(mediumIdx, SCALE_MEDIUM)
-            retune(lowIdx, SCALE_LOW)
+            retune(highIdx, percentToScaleBits(highPercent))
+            retune(mediumIdx, percentToScaleBits(mediumPercent))
+            retune(lowIdx, percentToScaleBits(lowPercent))
         }
 
         // --- Part 2: rewrite the constant-frame-rate formula to use the encoder ceiling ---
@@ -54,25 +82,37 @@ val bitrateTiersPatch = bytecodePatch(
             val igetIndex = fp.instructionMatches.first().index
             val method = fp.method
 
-            // The Math.min(II)I call clamps to the encoder max; its first argument register is it.
+            // The Math.min(II)I clamp at the end of the formula; its first argument
+            // register holds the encoder ceiling.
             val minInsn = fp.instructionMatches[1].getInstruction<Instruction35c>()
             val encoderMaxReg = minInsn.registerC
 
-            val intToFloat = method.getInstruction(igetIndex - 1)
-            val stripA = method.getInstruction(igetIndex + 2)
-            val stripB = method.getInstruction(igetIndex + 3)
-            if (intToFloat.opcode != Opcode.INT_TO_FLOAT ||
-                stripA.opcode != Opcode.INT_TO_FLOAT ||
-                stripB.opcode != Opcode.MUL_FLOAT_2ADDR
+            // 3.5.1 constant-frame-rate tail is double arithmetic:
+            //   iget            vScale, p3, BitrateLevel.f   (igetIndex)
+            //   float-to-double vScale, vScale              (+1)  scale as double
+            //   mul-double/2addr vAcc, vScale               (+2)  acc *= scale
+            //   int-to-double   vScale, vBase               (+3)  vScale = perSecondBase
+            //   mul-double/2addr vAcc, vScale               (+4)  acc *= perSecondBase
+            //   invoke z.v(D)I ; min(encoderMax, .)
+            val floatToDouble = method.getInstruction(igetIndex + 1)
+            val mulScale = method.getInstruction(igetIndex + 2)
+            val intToBase = method.getInstruction(igetIndex + 3)
+            val mulBase = method.getInstruction(igetIndex + 4)
+            if (floatToDouble.opcode != Opcode.FLOAT_TO_DOUBLE ||
+                mulScale.opcode != Opcode.MUL_DOUBLE_2ADDR ||
+                intToBase.opcode != Opcode.INT_TO_DOUBLE ||
+                mulBase.opcode != Opcode.MUL_DOUBLE_2ADDR
             ) {
                 throw PatchException("Unexpected bitrate formula shape; app internals changed.")
             }
 
-            val accumulatorReg = (intToFloat as TwoRegisterInstruction).registerA
-            // Feed the encoder ceiling into the accumulator instead of the resolution index.
-            method.replaceInstruction(igetIndex - 1, "int-to-float v$accumulatorReg, v$encoderMaxReg")
-            // Remove `int-to-float p1, vBase` + `mul-float/2addr p0, p1` (the resolution-base factor).
-            method.removeInstructions(igetIndex + 2, 2)
+            val accumulatorReg = (mulScale as TwoRegisterInstruction).registerA
+            // Overwrite the running accumulator (resolution * aspect * colorspace) with
+            // the encoder ceiling, discarding that base entirely.
+            method.replaceInstruction(igetIndex + 2, "int-to-double v$accumulatorReg, v$encoderMaxReg")
+            // Remove the per-second-base conversion so the scale value survives in its
+            // register; the trailing mul-double then yields round(encoderMax * scale).
+            method.removeInstructions(igetIndex + 3, 1)
         }
     }
 }

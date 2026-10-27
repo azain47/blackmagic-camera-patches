@@ -43,15 +43,11 @@ internal object BitrateLevelClinitFingerprint : Fingerprint(
 internal object BitrateFormulaFingerprint : Fingerprint(
     isStatic = true,
     returnType = "I",
-    parameters = listOf(
-        "Lcom/blackmagicdesign/android/utils/entity/StreamType;",
-        "I",
-        "Landroid/util/Size;",
-        BITRATE_LEVEL_CLASS,
-        "I",
-        "Lcom/blackmagicdesign/android/utils/entity/LiveStreamQuality;",
-        "Lcom/blackmagicdesign/android/utils/entity/Codec;",
-    ),
+    // Parameters are intentionally NOT declared. In 3.5.1 the method gained a
+    // trailing `ColorSpaceProfile` parameter (7 -> 8 args), which broke an exact
+    // parameter match. The `iget BitrateLevel.f` read is unique to this method
+    // across the whole app, so the instruction filters alone identify it and the
+    // match survives future signature changes.
     filters = listOf(
         fieldAccess(
             definingClass = BITRATE_LEVEL_CLASS,

@@ -20,6 +20,9 @@ internal object FrameFetcherLoadDataFingerprint : Fingerprint(
     returnType = "V",
     parameters = listOf("Lcom/bumptech/glide/Priority;", "L"),
     filters = listOf(
-        string("Frame extractor returned null"),
+        // 3.5.1 rewrote the fetcher: the body-level "Frame extractor returned null"
+        // string is gone. loadData now throws FileNotFoundException("URI does not
+        // exist: " + uri) when the clip is missing, a string unique to this method.
+        string("URI does not exist: "),
     ),
 )
