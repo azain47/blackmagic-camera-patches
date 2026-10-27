@@ -32,8 +32,8 @@ build won't start without it.
 
 ## Build
 
-Requirements: JDK 21+, a `kotlinc` on `PATH`, and the `morphe-desktop-*-all.jar`
-([releases](https://github.com/MorpheApp/morphe-desktop/releases)).
+Requirements: JDK 21+, a `kotlinc` and `d8` (Android SDK build-tools) on `PATH`, and the
+`morphe-desktop-*-all.jar` ([releases](https://github.com/MorpheApp/morphe-desktop/releases)).
 
 ```bash
 MORPHE_JAR=/path/to/morphe-desktop-1.19.1-all.jar ./build.sh
@@ -41,9 +41,22 @@ MORPHE_JAR=/path/to/morphe-desktop-1.19.1-all.jar ./build.sh
 ```
 
 The patches are compiled directly against the patcher API inside the morphe-desktop jar, so
-no Gradle or GitHub Packages authentication is needed.
+no Gradle or GitHub Packages authentication is needed. The `.mpp` bundles the patches as both
+a `classes.dex` (for the on-device Manager app) and JVM `.class` files (for morphe-desktop).
 
 ## Usage
+
+### On-device (Morphe / ReVanced Manager) — recommended
+
+1. Install the [Morphe Manager](https://morphe.software) app.
+2. In **Settings → Patch bundles**, add a new bundle from the URL of the `.mpp` asset on the
+   [latest release](https://github.com/azain47/blackmagic-camera-patches/releases/latest),
+   or import the downloaded `blackmagic-camera-patches.mpp` file. It appears as
+   **"Blackmagic Camera Patches"**.
+3. Select **Blackmagic Camera**, confirm the two patches are enabled, and patch. The Manager
+   handles the split APKs, re-signing and install for you.
+
+### On a computer (morphe-desktop)
 
 1. Obtain the genuine app. Blackmagic Camera ships as a **split APK bundle**. Pull the
    installed splits from your device, or download the bundle from a trusted mirror:
@@ -54,12 +67,11 @@ no Gradle or GitHub Packages authentication is needed.
 2. Patch `base.apk` (all patched code lives in the base module):
    ```bash
    java -jar morphe-desktop-*-all.jar patch \
-     --patches=build/blackmagic-camera-patches.mpp \
+     --patches=blackmagic-camera-patches.mpp \
      --keystore=my.keystore --keystore-password=... \
      --keystore-entry-alias=... --keystore-entry-password=... \
      -o base-patched.apk base.apk
    ```
-   Or use the **Morphe / ReVanced Manager** app on-device and point it at this bundle.
 3. Install the patched `base-patched.apk` together with the **unmodified** `split_config.*`
    APKs, using a split-APK installer (e.g. SAI) or:
    ```bash

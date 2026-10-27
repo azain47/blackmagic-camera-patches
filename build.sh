@@ -1,41 +1,88 @@
 #!/usr/bin/env bash
-# Builds the Blackmagic Camera patch bundle (MPP jar) from the Kotlin sources.
+# Builds the Blackmagic Camera patch bundle as a Morphe `.mpp`.
 #
-# No Gradle / GitHub Packages auth required: the patches are compiled directly
-# against the Morphe patcher API that ships inside the morphe-desktop fat jar.
+# The `.mpp` is a zip that contains:
+#   - classes.dex              : the patches as Dalvik bytecode (loaded on-device
+#                                by the Morphe / ReVanced Manager app)
+#   - app/.../*.class          : the same patches as JVM bytecode (loaded by
+#                                morphe-desktop on a computer)
+#   - META-INF/MANIFEST.MF     : bundle name/description/version shown in Manager
+#
+# No Gradle / GitHub Packages auth required: patches are compiled directly against
+# the Morphe patcher API that ships inside the morphe-desktop fat jar.
 #
 # Requirements:
 #   - JDK 21+
-#   - A Kotlin command-line compiler (kotlinc) on PATH, or set $KOTLINC
-#   - morphe-desktop-*-all.jar (set $MORPHE_JAR), from
+#   - kotlinc on PATH (or $KOTLINC)
+#   - d8 on PATH (or $D8), from the Android SDK build-tools
+#   - morphe-desktop-*-all.jar ($MORPHE_JAR), from
 #     https://github.com/MorpheApp/morphe-desktop/releases
 #
-# Output: build/blackmagic-camera-patches.jar (a jar loadable by morphe-desktop)
+# Output: build/blackmagic-camera-patches.mpp
 set -euo pipefail
-
 cd "$(dirname "$0")"
 
 KOTLINC="${KOTLINC:-kotlinc}"
+D8="${D8:-d8}"
 MORPHE_JAR="${MORPHE_JAR:-}"
-OUT="build/blackmagic-camera-patches.jar"
+VERSION="${VERSION:-1.0.0}"
+MIN_API="${MIN_API:-26}"
+
+NAME="Blackmagic Camera Patches"
+SOURCE="https://github.com/azain47/blackmagic-camera-patches"
+JAR="build/blackmagic-camera-patches.jar"
+MPP="build/blackmagic-camera-patches.mpp"
 
 if [[ -z "$MORPHE_JAR" || ! -f "$MORPHE_JAR" ]]; then
   echo "error: set MORPHE_JAR to the path of morphe-desktop-*-all.jar" >&2
   exit 1
 fi
 
-mkdir -p build
+rm -rf build && mkdir -p build/dex
 
-# The patcher API is compiled with a newer Kotlin metadata version than some
-# stable kotlinc releases ship; these flags let an older kotlinc read it, and
-# enable the context-parameter feature the patcher DSL relies on.
+# 1. Compile Kotlin patches -> JVM classes (jar). The patcher API is newer Kotlin
+#    metadata than some stable kotlinc releases; these flags let kotlinc read it
+#    and enable the context-parameter feature the DSL relies on.
 "$KOTLINC" \
   -no-stdlib \
   -Xskip-metadata-version-check \
   -Xskip-prerelease-check \
   -Xcontext-parameters \
   -classpath "$MORPHE_JAR" \
-  -d "$OUT" \
+  -d "$JAR" \
   $(find patches/src -name '*.kt')
 
-echo "built: $OUT"
+# 2. Convert the patch classes -> classes.dex (patcher API stays on the classpath,
+#    so only our own classes end up in the dex).
+"$D8" --min-api "$MIN_API" --classpath "$MORPHE_JAR" --output build/dex "$JAR"
+
+# 3. Assemble the .mpp: jar contents + classes.dex + a clean bundle manifest.
+#    Written with exact bytes (Morphe reads `Name:` as a main-section attribute,
+#    which the `jar` tool would otherwise mangle).
+MPP_NAME="$NAME" MPP_VERSION="$VERSION" MPP_SOURCE="$SOURCE" \
+  python3 - "$JAR" build/dex/classes.dex "$MPP" <<'PY'
+import os, sys, time, zipfile
+src, dex, out = sys.argv[1], sys.argv[2], sys.argv[3]
+manifest = (
+    "Manifest-Version: 1.0\r\n"
+    f"Name: {os.environ['MPP_NAME']}\r\n"
+    "Description: Bitrate tiers and license-check bypass.\r\n"
+    f"Version: {os.environ['MPP_VERSION']}\r\n"
+    f"Timestamp: {int(time.time()*1000)}\r\n"
+    f"Source: {os.environ['MPP_SOURCE']}\r\n"
+    "Author: azain47\r\n"
+    "Contact: na\r\n"
+    f"Website: {os.environ['MPP_SOURCE']}\r\n"
+    "License: MIT\r\n"
+    "Patcher-Version: 2.0.0\r\n\r\n"
+)
+zin = zipfile.ZipFile(src)
+with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zo:
+    zo.writestr("classes.dex", open(dex, "rb").read())
+    for n in zin.namelist():
+        if n != "META-INF/MANIFEST.MF":
+            zo.writestr(n, zin.read(n))
+    zo.writestr("META-INF/MANIFEST.MF", manifest)
+PY
+
+echo "built: $MPP"
