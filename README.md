@@ -14,15 +14,19 @@ they are meant to survive app updates rather than being pinned to one build.
 ## 🩹 Patches list
 
 <!-- PATCHES_START EXPANDED -->
+> **[v1.3.0-dev.1](https://github.com/azain47/blackmagic-camera-patches/releases/tag/v1.3.0-dev.1)**&nbsp;&nbsp;•&nbsp;&nbsp;`dev`&nbsp;&nbsp;•&nbsp;&nbsp;4 patches total
+<details open>
+<summary>📦 Blackmagic Camera&nbsp;&nbsp;•&nbsp;&nbsp;4 patches</summary>
+<br>
 
-<!-- Do not modify this section by hand. The patch list is generated when release.yml creates a new release. -->
+| 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
+|----------|----------------|-----------|
+| [Configurable bitrate tiers](#configurable-bitrate-tiers) | Rescales the LOW / MEDIUM / HIGH video bitrate tiers to 25% / 50% / 75% of the encoder's maximum (MAX is unchanged). At 1080p30 H.265 on a flagship this turns the stock 6 / 9 / 12 / 160 Mbps options into usable ~40 / 80 / 120 / 160 Mbps steps, removing the order-of-magnitude gap between HIGH and MAX. |  |
+| [Disable license check](#disable-license-check) | Disables the PairIP license verification that force-quits a re-signed build. Required for any patched build to launch. |  |
+| [Smooth gallery thumbnails](#smooth-gallery-thumbnails) | Replaces the in-app gallery's grid thumbnail fetcher, which spins up a full ExoPlayer + GL-readback pipeline per cell (hundreds of MB of transient graphics memory and a short-lived player for every tile), with a direct MediaMetadataRetriever.getScaledFrameAtTime decode at the tile size. This removes the memory spikes that make browsing stutter and can trigger the low-memory killer mid-record. |  |
+| [Unlock developer options](#unlock-developer-options) | Reveals the hidden internal "Development" settings category (debug UI overlay, software-encoder selection, custom bitrate field, camera-DB reload, etc.), which the stock release build gates behind an "internal builds only" check. Off by default: these are debug toggles, and some do nothing useful on a retail device. |  |
 
-| Patch | Default | What it does |
-|-------|---------|--------------|
-| **Smooth gallery thumbnails** | on | Replaces the in-app gallery's grid thumbnail fetcher, which starts a full ExoPlayer + GL-readback pipeline *per tile*, with a direct `MediaMetadataRetriever.getScaledFrameAtTime` decode at the tile size. |
-| **Configurable bitrate tiers** | on | Rescales LOW / MEDIUM / HIGH to **25% / 50% / 75% of the encoder's maximum** (MAX unchanged). At 1080p30 H.265 on a flagship: stock **6 / 9 / 12 / 160 Mbps** → **~40 / 80 / 120 / 160**. |
-| **Disable license check** | on | Neutralizes PairIP's `LicenseClient.checkLicense`, which force-quits any re-signed (patched) build ~1 s after launch. |
-| **Unlock developer options** | **off** | Reveals the hidden internal "Development" settings category. |
+</details>
 
 <!-- PATCHES_END -->
 

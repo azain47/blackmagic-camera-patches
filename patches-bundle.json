@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-10-27T07:40:00",
-  "description": "## 1.2.0\n\n* **Unlock developer options** (new, off by default) — reveals the hidden internal \"Development\" settings category.\n* Compatibility is now version-agnostic (any build) and declared as an APKM split bundle, so Manager can download/patch the current mirror build (the Play build is often a step newer than mirrors).\n* **Smooth gallery thumbnails** — direct MediaMetadataRetriever decode instead of a per-tile ExoPlayer pipeline.\n* **Disable license check** — neutralizes PairIP so a re-signed build launches.\n* **Configurable bitrate tiers** — LOW/MEDIUM/HIGH become 25/50/75% of the encoder ceiling.",
-  "download_url": "https://github.com/azain47/blackmagic-camera-patches/releases/download/v1.2.0/blackmagic-camera-patches.mpp",
+  "created_at": "2026-10-27T15:32:23",
+  "description": "## [1.3.0-dev.1](https://github.com/azain47/blackmagic-camera-patches/compare/v1.2.0...v1.3.0-dev.1) (2026-10-27)\n\n### ✨ New Features\n\n* move to the Morphe patches template build and release pipeline ([4b48b4d](https://github.com/azain47/blackmagic-camera-patches/commit/4b48b4d9bab17ff73195ef75b054817697f1f9cc))",
+  "download_url": "https://github.com/azain47/blackmagic-camera-patches/releases/download/v1.3.0-dev.1/patches-1.3.0-dev.1.mpp",
   "signature_download_url": "",
-  "version": "1.2.0"
+  "version": "1.3.0-dev.1"
 }
