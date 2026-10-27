@@ -18,9 +18,10 @@ they are meant to survive app updates rather than being pinned to one build.
 | **Disable license check** | on | Neutralizes PairIP's `LicenseClient.checkLicense`, which otherwise force-quits any re-signed (i.e. patched) build ~1 s after launch. Required for any patched build to run. |
 | **Configurable bitrate tiers** | on | Rescales the LOW / MEDIUM / HIGH video bitrate tiers to **25% / 50% / 75% of the encoder's maximum** (MAX unchanged). On a flagship at 1080p30 H.265 this turns the stock **6 / 9 / 12 / 160 Mbps** options into usable **~40 / 80 / 120 / 160 Mbps** steps, removing the order-of-magnitude gap between HIGH and MAX. |
 | **Smooth gallery thumbnails** | on | Replaces the in-app gallery's grid thumbnail fetcher — which spins up a full ExoPlayer + GL-readback pipeline *per tile* (hundreds of MB of transient graphics memory and a short-lived video player for every thumbnail) — with a direct `MediaMetadataRetriever.getScaledFrameAtTime` decode at the tile size. In testing this cut browsing-time graphics memory from a ~770 MB peak to ~105 MB and player instantiations from ~121 to ~12 per session, removing the stutter and the low-memory-killer risk during recording. |
+| **Unlock developer options** | **off** | Reveals the hidden internal "Development" settings category (debug-UI overlay, software-encoder selection, custom bitrate field, camera-DB reload, …), gated behind an "internal builds only" check in release builds. Off by default — these are debug toggles, and some do nothing useful on a retail device. |
 
-All three patches are verified end-to-end (compiled → applied with `morphe-desktop` → confirmed
-in the output dex). Each is independently toggleable in the Manager. See
+All patches are verified end-to-end (compiled → applied with `morphe-desktop` → confirmed in the
+output dex) and each is independently toggleable in the Manager. See
 [`docs/BLACKMAGIC_REPORT.md`](docs/BLACKMAGIC_REPORT.md) for the full investigation, including the
 memory/freeze root-cause analysis behind the gallery fix.
 
@@ -87,13 +88,24 @@ a `classes.dex` (for the on-device Manager app) and JVM `.class` files (for morp
 > Patching re-signs the app with your own key, so Play Store auto-updates stop. Re-patch
 > new versions yourself.
 
-## Compatibility
+## Compatibility & getting the APK
 
-Developed and verified against **v3.5.0.0066** (`com.blackmagicdesign.android.blackmagiccam`).
-The fingerprints avoid obfuscated names and anchor on stable types (e.g. the non-obfuscated
-`BitrateLevel` enum and the `com.pairip.licensecheck` package), so they should apply to
-nearby versions. Use `-f` / Manager's "suggested version" override to try other builds; a
-fingerprint that no longer matches fails loudly instead of corrupting the app.
+Declared compatible with **any version** of `com.blackmagicdesign.android.blackmagiccam`, as an
+**APKM split bundle**. The fingerprints avoid obfuscated names — they anchor on stable types and
+strings (the non-obfuscated `BitrateLevel` / `BaseSettingsCategory$Availability` enums, the
+`com.pairip.licensecheck` package, the `"Frame extractor"` string) and rediscover obfuscated
+references from bytecode — so they are meant to apply across versions, and a fingerprint that no
+longer matches fails loudly instead of corrupting the app. Verified end-to-end against **3.5.0.0066**.
+
+Why not pin a version: the build Google Play installs is often a step newer than the public mirrors
+(e.g. Play ships **3.5.0.0066** while APKMirror's latest is **3.5.0.0064**). Pinning an exact
+version makes Manager's downloader find nothing, so the version is left open — Manager downloads
+whatever build is currently available and patches that.
+
+Manager resolves the download itself from the package name (APKMirror / Uptodown / APKPure /
+APKCombo). To fetch it by hand, grab the latest **BUNDLE (APKM)** from
+[APKMirror](https://www.apkmirror.com/apk/blackmagic-design-inc/blackmagic-camera/) and hand the
+`.apkm`/`.apks` to Manager or `morphe-desktop` — don't un-split it.
 
 ## Roadmap
 
@@ -101,7 +113,6 @@ Additional on-device-verified fixes from the investigation, not yet ported to pa
 
 - Deterministic ExoPlayer release when leaving the gallery player, a cap on the placeholder-bitmap
   cache, and a tighter muxer sample-window — further trims to the memory pressure behind the freezes.
-- Optional **Unlock developer options** (exposes the hidden internal settings category).
 
 These are documented with exact bytecode in [`docs/BLACKMAGIC_REPORT.md`](docs/BLACKMAGIC_REPORT.md).
 
