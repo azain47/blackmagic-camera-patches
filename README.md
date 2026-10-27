@@ -17,11 +17,12 @@ they are meant to survive app updates rather than being pinned to one build.
 |-------|---------|--------------|
 | **Disable license check** | on | Neutralizes PairIP's `LicenseClient.checkLicense`, which otherwise force-quits any re-signed (i.e. patched) build ~1 s after launch. Required for any patched build to run. |
 | **Configurable bitrate tiers** | on | Rescales the LOW / MEDIUM / HIGH video bitrate tiers to **25% / 50% / 75% of the encoder's maximum** (MAX unchanged). On a flagship at 1080p30 H.265 this turns the stock **6 / 9 / 12 / 160 Mbps** options into usable **~40 / 80 / 120 / 160 Mbps** steps, removing the order-of-magnitude gap between HIGH and MAX. |
+| **Smooth gallery thumbnails** | on | Replaces the in-app gallery's grid thumbnail fetcher — which spins up a full ExoPlayer + GL-readback pipeline *per tile* (hundreds of MB of transient graphics memory and a short-lived video player for every thumbnail) — with a direct `MediaMetadataRetriever.getScaledFrameAtTime` decode at the tile size. In testing this cut browsing-time graphics memory from a ~770 MB peak to ~105 MB and player instantiations from ~121 to ~12 per session, removing the stutter and the low-memory-killer risk during recording. |
 
-Both patches are verified end-to-end (compiled → applied with `morphe-desktop` → confirmed
-in the output dex). See [`docs/BLACKMAGIC_REPORT.md`](docs/BLACKMAGIC_REPORT.md) for the full
-investigation, including the memory/freeze root-cause analysis and the gallery-performance fix
-that is still being ported to a fingerprint-based patch (see *Roadmap*).
+All three patches are verified end-to-end (compiled → applied with `morphe-desktop` → confirmed
+in the output dex). Each is independently toggleable in the Manager. See
+[`docs/BLACKMAGIC_REPORT.md`](docs/BLACKMAGIC_REPORT.md) for the full investigation, including the
+memory/freeze root-cause analysis behind the gallery fix.
 
 ## Why
 
@@ -96,17 +97,13 @@ fingerprint that no longer matches fails loudly instead of corrupting the app.
 
 ## Roadmap
 
-The investigation also produced on-device-verified fixes for the **freezes** (the memory
-pressure from the in-app gallery, which could trigger the low-memory killer mid-recording):
+Additional on-device-verified fixes from the investigation, not yet ported to patches here:
 
-- **Smooth gallery thumbnails** — the grid thumbnail fetcher spins up a full ExoPlayer + GL
-  readback pipeline per cell; replacing it with `MediaMetadataRetriever.getScaledFrameAtTime`
-  cut browsing-time graphics memory from ~770 MB peak to ~105 MB and player instantiations
-  from 121 to ~12 per session.
-- Player release on gallery exit, placeholder-bitmap cache cap, muxer sample-window trim.
+- Deterministic ExoPlayer release when leaving the gallery player, a cap on the placeholder-bitmap
+  cache, and a tighter muxer sample-window — further trims to the memory pressure behind the freezes.
+- Optional **Unlock developer options** (exposes the hidden internal settings category).
 
-These are documented with exact bytecode in [`docs/BLACKMAGIC_REPORT.md`](docs/BLACKMAGIC_REPORT.md)
-and are being ported from proven raw-smali edits to fingerprint-based patches for inclusion here.
+These are documented with exact bytecode in [`docs/BLACKMAGIC_REPORT.md`](docs/BLACKMAGIC_REPORT.md).
 
 ## Credits & reporting
 
